@@ -18,8 +18,9 @@ This repo contains the open-source components: contracts, deploy scripts, the Go
 |---|---|
 | `contracts/` | Solidity sources — V3 core, V3 periphery, Universal Router + Permit2, Sentry launchpad, Citadel LP locker, vendored proxies |
 | `script/` | Foundry deploy + upgrade scripts |
-| `subgraph/` | Tsunami V3 subgraph — pools, swaps, mints/burns, positions, plus per-EOA `User` aggregates and Sentry-pool tagging |
+| `subgraph/` | Tsunami V3 subgraph — pools, swaps, mints/burns, positions, plus per-EOA `User` aggregates and Sentry-pool tagging. See [`subgraph/README.md`](subgraph/README.md) for query recipes. |
 | `mcp-server/` | Model Context Protocol server — wraps Tsunami / Citadel / Sentry / subgraph as named tool calls for AI agents |
+| `docs/` | Component-level writeups. [`docs/sentry.md`](docs/sentry.md) covers the launchpad's atomic launch flow, fee routing, and integration points. |
 | `lib/`, `src/` | Foundry deps + vendored Uniswap V3 sources (kept under their original SPDX licenses) |
 | `@openzeppelin/`, `@uniswap/`, `base64-sol/` | Vendored package deps |
 
