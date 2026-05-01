@@ -1,0 +1,10 @@
+@uniswap/v3-core/=src/pkgs/v3-core/
+@uniswap/v3-periphery/=src/pkgs/v3-periphery/
+@uniswap/v2-core/=src/pkgs/v2-core/
+@uniswap/swap-router-contracts/=src/pkgs/swap-router-contracts/
+@uniswap/lib/=@uniswap/lib/
+@openzeppelin/=@openzeppelin/
+base64-sol/=base64-sol/
+solmate/=lib/solmate/
+forge-std/=lib/forge-std/src/
+permit2/=lib/permit2/

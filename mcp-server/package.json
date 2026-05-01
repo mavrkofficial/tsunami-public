@@ -1,0 +1,19 @@
+{
+  "name": "tsunami-mcp",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Unified MCP server for Tsunami DEX, SentryLaunchFactory, and Citadel on Ink chain",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc && node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "viem": "^2.28.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}

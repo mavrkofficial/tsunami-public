@@ -1,0 +1,8 @@
+# graph-cli artifacts
+build/
+generated/
+
+# tooling
+node_modules/
+.idea/
+.vscode/

@@ -1,0 +1,28 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Foundry
+cache/
+out/
+broadcast/
+
+# Build artifacts
+build_*.txt
+pool_bc_hex.txt
+poolbc.*
+
+# Node
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Pool managers (proprietary)
+*PoolManager*.sol

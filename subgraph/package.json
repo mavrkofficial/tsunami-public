@@ -1,0 +1,19 @@
+{
+  "name": "tsunami-v3-subgraph",
+  "version": "2.0.0",
+  "description": "Subgraph for Tsunami V3 DEX on Ink Chain (57073)",
+  "repository": "https://github.com/mavrkofficial/tsunami",
+  "license": "MIT",
+  "scripts": {
+    "codegen": "graph codegen",
+    "build": "graph build",
+    "deploy:goldsky": "goldsky subgraph deploy tsunami-v3/2.4.0 --path .",
+    "create-local": "graph create --node http://localhost:8020/ tsunami-v3-ink",
+    "remove-local": "graph remove --node http://localhost:8020/ tsunami-v3-ink",
+    "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 tsunami-v3-ink"
+  },
+  "devDependencies": {
+    "@graphprotocol/graph-cli": "0.71.0",
+    "@graphprotocol/graph-ts": "0.32.0"
+  }
+}
