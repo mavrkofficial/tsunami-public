@@ -1,5 +1,13 @@
 # Tsunami
 
+[![Chain: Ink 57073](https://img.shields.io/badge/chain-Ink%2057073-2563eb)](https://explorer.inkonchain.com)
+[![Solidity ^0.8.20](https://img.shields.io/badge/solidity-%5E0.8.20-363636)](https://soliditylang.org)
+[![Built with Foundry](https://img.shields.io/badge/built%20with-Foundry-fe5d26)](https://book.getfoundry.sh)
+[![Subgraph: Goldsky](https://img.shields.io/badge/subgraph-Goldsky-7d56f3)](https://api.goldsky.com/api/public/project_cmm7vh5xwsa8m01qmdr7w7u62/subgraphs/tsunami-v3/2.4.0/gn)
+[![Status: Unaudited](https://img.shields.io/badge/status-unaudited-eab308)](#)
+
+> Open-source contracts, deploy scripts, subgraph, and MCP server for the **Tsunami DEX** on Ink. The frontend is a separate (private) repo. **Unaudited — use at your own risk.**
+
 A concentrated-liquidity decentralized exchange on **Ink** (chain ID `57073`). Direct fork of Uniswap V3 with extensions tuned for the full volatility spectrum on an L2 — stable pegs, mid-vol alts, correlated vol pairs, and freshly-launched memes.
 
 This repo contains the open-source components: contracts, deploy scripts, the Goldsky-hosted subgraph, and the MCP server that exposes the protocol as agent-callable tools.
