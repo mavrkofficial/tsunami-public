@@ -65,12 +65,17 @@ abstract contract ERC2771Context is Context {
     }
 }
 
+interface ISentryVerificationRegistry {
+    function canTransfer(address operator, address from, address to) external view returns (bool);
+}
+
 contract SentryTokenStandard is ERC2771Context {
     string public name;
     string public symbol;
     uint8 public decimals;
     uint256 public totalSupply;
     address public owner;
+    address public verificationRegistry;
 
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
@@ -78,12 +83,19 @@ contract SentryTokenStandard is ERC2771Context {
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
 
-    constructor(string memory _name, string memory _symbol, address _deployer, address trustedForwarder_) ERC2771Context(trustedForwarder_) {
+    constructor(
+        string memory _name,
+        string memory _symbol,
+        address _deployer,
+        address trustedForwarder_,
+        address _verificationRegistry
+    ) ERC2771Context(trustedForwarder_) {
         name = _name;
         symbol = _symbol;
         decimals = 18;
         totalSupply = 1_000_000_000 * (10 ** uint256(decimals));
         owner = address(0x000000000000000000000000000000000000dEaD);
+        verificationRegistry = _verificationRegistry;
         balanceOf[_deployer] = totalSupply;
         emit Transfer(address(0), _deployer, totalSupply);
     }
@@ -95,21 +107,32 @@ contract SentryTokenStandard is ERC2771Context {
     }
 
     function transfer(address to, uint256 amount) public returns (bool) {
-        require(balanceOf[_msgSender()] >= amount, "Insufficient balance");
-        balanceOf[_msgSender()] -= amount;
-        balanceOf[to] += amount;
-        emit Transfer(_msgSender(), to, amount);
+        _transfer(_msgSender(), to, amount, _msgSender());
         return true;
     }
 
     function transferFrom(address from, address to, uint256 amount) public returns (bool) {
-        require(balanceOf[from] >= amount, "Insufficient balance");
         require(allowance[from][_msgSender()] >= amount, "Insufficient allowance");
+        allowance[from][_msgSender()] -= amount;
+        _transfer(from, to, amount, _msgSender());
+        return true;
+    }
+
+    function _transfer(address from, address to, uint256 amount, address operator) internal {
+        require(from != address(0), "Transfer from zero");
+        require(to != address(0), "Transfer to zero");
+        require(balanceOf[from] >= amount, "Insufficient balance");
+
+        if (verificationRegistry != address(0)) {
+            require(
+                ISentryVerificationRegistry(verificationRegistry).canTransfer(operator, from, to),
+                "Transfer not allowed"
+            );
+        }
+
         balanceOf[from] -= amount;
         balanceOf[to] += amount;
-        allowance[from][_msgSender()] -= amount;
         emit Transfer(from, to, amount);
-        return true;
     }
 
     function _msgSender() internal view override returns (address sender) {

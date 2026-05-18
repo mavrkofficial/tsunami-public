@@ -30,6 +30,11 @@ interface IIdentityRegistry {
     function balanceOf(address owner) external view returns (uint256);
 }
 
+interface ISentryLaunchVerificationRegistry {
+    function canLaunch(address issuer) external view returns (bool);
+    function setProtocolAllowed(address account, bool allowed) external;
+}
+
 /* ─────────────────────────── Structs ─────────────────────────── */
 
 struct MintingDetails {
@@ -112,6 +117,8 @@ contract SentryLaunchFactory {
     address private __deprecated_feesWalletRegular;
     address private __deprecated_feesWalletAgent;
     address public identityRegistry;
+    mapping(uint256 => bool) public isKrakenVerifiedPosition;
+    address public krakenVerifiedRegistry;
 
     /* ──────────────────────────────── Events ──────────────────────────────── */
 
@@ -135,6 +142,14 @@ contract SentryLaunchFactory {
     event NPMUpdated(address oldNPM, address newNPM);
     event TrustedForwarderUpdated(address oldForwarder, address newForwarder);
     event IdentityRegistryUpdated(address oldRegistry, address newRegistry);
+    event KrakenVerifiedRegistryUpdated(address oldRegistry, address newRegistry);
+    event KrakenVerifiedTokenDeployed(
+        address indexed token,
+        string name,
+        string symbol,
+        address indexed creator,
+        uint256 tokenId
+    );
 
     /* ─────────────────────────────── Modifiers ─────────────────────────────── */
 
@@ -264,7 +279,7 @@ contract SentryLaunchFactory {
         string memory _symbol,
         address baseToken
     ) external nonReentrant returns (address tokenAddress, uint256 tokenId) {
-        return _launchInternal(_name, _symbol, baseToken, false);
+        return _launchInternal(_name, _symbol, baseToken, false, false);
     }
 
     /**
@@ -280,20 +295,52 @@ contract SentryLaunchFactory {
             IIdentityRegistry(identityRegistry).balanceOf(_msgSender()) > 0,
             "MoltiverseAgentRegistry: caller not a registered agent"
         );
-        return _launchInternal(_name, _symbol, baseToken, true);
+        return _launchInternal(_name, _symbol, baseToken, true, false);
+    }
+
+    /**
+     * @notice Launch path for Kraken Verified users only.
+     * @dev Deploys a registry-gated token, so both launches and transfers are
+     *      constrained by the configured Kraken verification registry.
+     */
+    function launchKrakenVerified(
+        string memory _name,
+        string memory _symbol,
+        address baseToken
+    ) external nonReentrant returns (address tokenAddress, uint256 tokenId) {
+        require(krakenVerifiedRegistry != address(0), "Kraken registry not set");
+        require(
+            ISentryLaunchVerificationRegistry(krakenVerifiedRegistry).canLaunch(_msgSender()),
+            "Caller not Kraken verified"
+        );
+        return _launchInternal(_name, _symbol, baseToken, false, true);
     }
 
     function _launchInternal(
         string memory _name,
         string memory _symbol,
         address baseToken,
-        bool isAgent
+        bool isAgent,
+        bool isKrakenVerified
     ) internal returns (address tokenAddress, uint256 tokenId) {
         require(baseTokenToPoolManager[baseToken] != address(0), "Base token not supported");
 
-        SentryTokenStandard token = new SentryTokenStandard(_name, _symbol, address(this), _trustedForwarder);
+        address tokenRegistry = isKrakenVerified ? krakenVerifiedRegistry : address(0);
+        SentryTokenStandard token = new SentryTokenStandard(
+            _name,
+            _symbol,
+            address(this),
+            _trustedForwarder,
+            tokenRegistry
+        );
         tokenAddress = address(token);
         totalTokensDeployed++;
+
+        if (isKrakenVerified) {
+            _allowlistKrakenVerifiedProtocolAddress(address(this));
+            _allowlistKrakenVerifiedProtocolAddress(npm);
+            _allowlistKrakenVerifiedProtocolAddress(treasury);
+        }
 
         require(token.approve(npm, type(uint256).max), "Approval failed");
 
@@ -302,7 +349,7 @@ contract SentryLaunchFactory {
         address token1 = tokenAddress < baseToken ? baseToken : tokenAddress;
 
         require(
-            _tryPoolAndMint(tokenAddress, token0, token1, baseToken, _msgSender(), isAgent),
+            _tryPoolAndMint(tokenAddress, token0, token1, baseToken, _msgSender(), isAgent, isKrakenVerified),
             "Pool creation and mint failed"
         );
 
@@ -310,6 +357,9 @@ contract SentryLaunchFactory {
         tokenId = creatorNFTList[creatorNFTList.length - 1];
 
         emit TokenDeployed(tokenAddress, _name, _symbol, _msgSender(), tokenId);
+        if (isKrakenVerified) {
+            emit KrakenVerifiedTokenDeployed(tokenAddress, _name, _symbol, _msgSender(), tokenId);
+        }
     }
 
     /* ──────────────────────── Internal Pool & Mint Logic ───────────────────── */
@@ -320,7 +370,8 @@ contract SentryLaunchFactory {
         address token1,
         address baseToken,
         address creator,
-        bool isAgent
+        bool isAgent,
+        bool isKrakenVerified
     ) internal returns (bool) {
         _tempCreator = creator;
         _tempToken0 = token0;
@@ -337,22 +388,30 @@ contract SentryLaunchFactory {
             details.amount1Min
         ) = ITsunamiPoolManager(baseTokenToPoolManager[baseToken]).getMintingParameters(tokenAddress, token0, token1);
 
-        if (!_createAndInitializePool(details.sqrtPriceX96)) return false;
-        return _mintPosition(details, tokenAddress, isAgent);
+        if (!_createAndInitializePool(details.sqrtPriceX96, isKrakenVerified)) return false;
+        return _mintPosition(details, tokenAddress, isAgent, isKrakenVerified);
     }
 
-    function _createAndInitializePool(uint160 sqrtPriceX96) internal returns (bool) {
+    function _createAndInitializePool(uint160 sqrtPriceX96, bool isKrakenVerified) internal returns (bool) {
         try INonfungiblePositionManager(npm).createAndInitializePoolIfNecessary(
             _tempToken0, _tempToken1, FEE_TIER, sqrtPriceX96
         ) returns (address pool) {
             _tempPool = pool;
+            if (isKrakenVerified) {
+                _allowlistKrakenVerifiedProtocolAddress(pool);
+            }
             return true;
         } catch {
             return false;
         }
     }
 
-    function _mintPosition(MintingDetails memory details, address tokenAddress, bool isAgent) internal returns (bool) {
+    function _mintPosition(
+        MintingDetails memory details,
+        address tokenAddress,
+        bool isAgent,
+        bool isKrakenVerified
+    ) internal returns (bool) {
         INonfungiblePositionManager.MintParams memory params = INonfungiblePositionManager.MintParams({
             token0: _tempToken0,
             token1: _tempToken1,
@@ -368,7 +427,13 @@ contract SentryLaunchFactory {
         });
 
         try INonfungiblePositionManager(npm).mint(params) returns (uint256 tokenId, uint128, uint256, uint256) {
-            return _handleSuccessfulMint(tokenId, INonfungiblePositionManager(npm), tokenAddress, isAgent);
+            return _handleSuccessfulMint(
+                tokenId,
+                INonfungiblePositionManager(npm),
+                tokenAddress,
+                isAgent,
+                isKrakenVerified
+            );
         } catch {
             return false;
         }
@@ -378,12 +443,14 @@ contract SentryLaunchFactory {
         uint256 tokenId,
         INonfungiblePositionManager npmContract,
         address tokenAddress,
-        bool isAgent
+        bool isAgent,
+        bool isKrakenVerified
     ) internal returns (bool) {
         nftCreators[tokenId] = _tempCreator;
         creatorNFTs[_tempCreator].push(tokenId);
         tokenIdToToken[tokenId] = tokenAddress;
         isAgentPosition[tokenId] = isAgent;
+        isKrakenVerifiedPosition[tokenId] = isKrakenVerified;
 
         require(npmContract.ownerOf(tokenId) == address(this), "Factory does not own LP NFT");
 
@@ -393,6 +460,10 @@ contract SentryLaunchFactory {
         emit LPLocked(tokenId, _tempPool, tokenAddress);
 
         return true;
+    }
+
+    function _allowlistKrakenVerifiedProtocolAddress(address account) internal {
+        ISentryLaunchVerificationRegistry(krakenVerifiedRegistry).setProtocolAllowed(account, true);
     }
 
     /* ──────────────────────────── Fee Collection ───────────────────────────── */
@@ -516,6 +587,23 @@ contract SentryLaunchFactory {
         emit IdentityRegistryUpdated(old, _registry);
     }
 
+    function setKrakenVerifiedRegistry(address _registry) external onlyOwner {
+        require(_registry != address(0), "Invalid registry");
+        address old = krakenVerifiedRegistry;
+        krakenVerifiedRegistry = _registry;
+        emit KrakenVerifiedRegistryUpdated(old, _registry);
+    }
+
+    function syncKrakenVerifiedProtocolAllowlist(address router, address quoter) external onlyOwner {
+        require(krakenVerifiedRegistry != address(0), "Kraken registry not set");
+
+        _allowlistKrakenVerifiedProtocolAddress(address(this));
+        _allowlistKrakenVerifiedProtocolAddress(npm);
+        _allowlistKrakenVerifiedProtocolAddress(treasury);
+        if (router != address(0)) _allowlistKrakenVerifiedProtocolAddress(router);
+        if (quoter != address(0)) _allowlistKrakenVerifiedProtocolAddress(quoter);
+    }
+
     /* ──────────────────────────── View Functions ───────────────────────────── */
 
     function getPoolManager(address baseToken) external view returns (address) {
@@ -564,5 +652,6 @@ contract SentryLaunchFactory {
     ///      V3 consumed 4 slots: isAgentPosition, __deprecated_feesWalletRegular,
     ///                           __deprecated_feesWalletAgent, identityRegistry.
     ///      V4 consumed 0 slots (CREATOR_FEE_BPS / BPS_DENOMINATOR are constants).
-    uint256[45] private __gap;
+    ///      V5 consumed 2 slots: isKrakenVerifiedPosition, krakenVerifiedRegistry.
+    uint256[43] private __gap;
 }
