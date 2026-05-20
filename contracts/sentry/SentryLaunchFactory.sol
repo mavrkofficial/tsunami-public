@@ -9,7 +9,7 @@ pragma solidity ^0.8.20;
  *
  * Key features:
  * - Multi-base token support (WETH, etc.) each with its own pool manager
- * - WETH-side LP fees split: 25% to creator (nftCreators[tokenId]), 75% to treasury
+ * - WETH-side LP fees split by configurable creator fee bps (default 50/50)
  * - Token-side LP fees: 100% to treasury
  * - Non-WETH paired pools: both sides 100% to treasury (legacy fallback)
  * - LP NFTs permanently held in factory (LPLocked event for indexers)
@@ -72,7 +72,7 @@ contract SentryLaunchFactory {
 
     // Constants
     uint24 public constant FEE_TIER = 10000; // 1% fee tier for launches
-    uint256 public constant CREATOR_FEE_BPS = 2500; // 25% of WETH-side LP fees → creator
+    uint256 private constant DEFAULT_CREATOR_FEE_BPS = 5000; // 50% of WETH-side LP fees → creator
     uint256 private constant BPS_DENOMINATOR = 10_000;
 
     // ERC-2771 trusted forwarder (Gelato relay) — stored in regular storage
@@ -119,6 +119,7 @@ contract SentryLaunchFactory {
     address public identityRegistry;
     mapping(uint256 => bool) public isKrakenVerifiedPosition;
     address public krakenVerifiedRegistry;
+    uint256 private _creatorFeeBps;
 
     /* ──────────────────────────────── Events ──────────────────────────────── */
 
@@ -142,6 +143,7 @@ contract SentryLaunchFactory {
     event NPMUpdated(address oldNPM, address newNPM);
     event TrustedForwarderUpdated(address oldForwarder, address newForwarder);
     event IdentityRegistryUpdated(address oldRegistry, address newRegistry);
+    event CreatorFeeBpsUpdated(uint256 oldCreatorFeeBps, uint256 newCreatorFeeBps);
     event KrakenVerifiedRegistryUpdated(address oldRegistry, address newRegistry);
     event KrakenVerifiedTokenDeployed(
         address indexed token,
@@ -225,6 +227,7 @@ contract SentryLaunchFactory {
         _trustedForwarder = trustedForwarder_;
         owner = _msgSender();       // proxy deployer becomes owner
         _status = _NOT_ENTERED;
+        _creatorFeeBps = DEFAULT_CREATOR_FEE_BPS;
 
         baseTokenToPoolManager[_initialBaseToken] = _initialPoolManager;
         baseTokens.push(_initialBaseToken);
@@ -501,7 +504,7 @@ contract SentryLaunchFactory {
     }
 
     /// @dev Routes accrued fees:
-    ///        - WETH side  → 25% creator (CREATOR_FEE_BPS), 75% treasury
+    ///        - WETH side  → creatorFeeBps() to creator, remainder to treasury
     ///        - Token side → 100% treasury
     ///        - Non-WETH paired pools (legacy fallback) → both sides to treasury
     ///      If nftCreators[tokenId] is unset (shouldn't happen), the full
@@ -528,7 +531,7 @@ contract SentryLaunchFactory {
         // ─── WETH side: 25% creator, 75% treasury ────────────────────────────
         if (wethAmount > 0) {
             address creator = nftCreators[tokenId];
-            uint256 creatorCut = (wethAmount * CREATOR_FEE_BPS) / BPS_DENOMINATOR;
+            uint256 creatorCut = (wethAmount * creatorFeeBps()) / BPS_DENOMINATOR;
             uint256 treasuryCut = wethAmount - creatorCut;
 
             // Defensive: if the creator slot is somehow unset, redirect the
@@ -585,6 +588,23 @@ contract SentryLaunchFactory {
         address old = identityRegistry;
         identityRegistry = _registry;
         emit IdentityRegistryUpdated(old, _registry);
+    }
+
+    /// @notice Backwards-compatible getter for integrations that read the old public constant.
+    function CREATOR_FEE_BPS() external view returns (uint256) {
+        return creatorFeeBps();
+    }
+
+    function creatorFeeBps() public view returns (uint256) {
+        uint256 configured = _creatorFeeBps;
+        return configured == 0 ? DEFAULT_CREATOR_FEE_BPS : configured;
+    }
+
+    function setCreatorFeeBps(uint256 newCreatorFeeBps) external onlyOwner {
+        require(newCreatorFeeBps > 0 && newCreatorFeeBps <= BPS_DENOMINATOR, "Invalid creator fee");
+        uint256 old = creatorFeeBps();
+        _creatorFeeBps = newCreatorFeeBps;
+        emit CreatorFeeBpsUpdated(old, newCreatorFeeBps);
     }
 
     function setKrakenVerifiedRegistry(address _registry) external onlyOwner {
@@ -651,7 +671,8 @@ contract SentryLaunchFactory {
     ///      V2 consumed 1 slot: __deprecated_citadel.
     ///      V3 consumed 4 slots: isAgentPosition, __deprecated_feesWalletRegular,
     ///                           __deprecated_feesWalletAgent, identityRegistry.
-    ///      V4 consumed 0 slots (CREATOR_FEE_BPS / BPS_DENOMINATOR are constants).
+    ///      V4 consumed 0 slots (fee constants only).
     ///      V5 consumed 2 slots: isKrakenVerifiedPosition, krakenVerifiedRegistry.
-    uint256[43] private __gap;
+    ///      V6 consumed 1 slot: _creatorFeeBps.
+    uint256[42] private __gap;
 }
