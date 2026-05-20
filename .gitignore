@@ -6,6 +6,7 @@
 # Foundry
 cache/
 out/
+out-*/
 broadcast/
 
 # Build artifacts

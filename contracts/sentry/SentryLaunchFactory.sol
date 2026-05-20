@@ -35,6 +35,10 @@ interface ISentryLaunchVerificationRegistry {
     function setProtocolAllowed(address account, bool allowed) external;
 }
 
+interface ISentryProtocolFeeController {
+    function setProtocolFeeForPool(address pool) external;
+}
+
 /* ─────────────────────────── Structs ─────────────────────────── */
 
 struct MintingDetails {
@@ -120,6 +124,7 @@ contract SentryLaunchFactory {
     mapping(uint256 => bool) public isKrakenVerifiedPosition;
     address public krakenVerifiedRegistry;
     uint256 private _creatorFeeBps;
+    address public protocolFeeController;
 
     /* ──────────────────────────────── Events ──────────────────────────────── */
 
@@ -144,6 +149,7 @@ contract SentryLaunchFactory {
     event TrustedForwarderUpdated(address oldForwarder, address newForwarder);
     event IdentityRegistryUpdated(address oldRegistry, address newRegistry);
     event CreatorFeeBpsUpdated(uint256 oldCreatorFeeBps, uint256 newCreatorFeeBps);
+    event ProtocolFeeControllerUpdated(address oldController, address newController);
     event KrakenVerifiedRegistryUpdated(address oldRegistry, address newRegistry);
     event KrakenVerifiedTokenDeployed(
         address indexed token,
@@ -403,6 +409,9 @@ contract SentryLaunchFactory {
             if (isKrakenVerified) {
                 _allowlistKrakenVerifiedProtocolAddress(pool);
             }
+            if (protocolFeeController != address(0)) {
+                ISentryProtocolFeeController(protocolFeeController).setProtocolFeeForPool(pool);
+            }
             return true;
         } catch {
             return false;
@@ -607,6 +616,12 @@ contract SentryLaunchFactory {
         emit CreatorFeeBpsUpdated(old, newCreatorFeeBps);
     }
 
+    function setProtocolFeeController(address newController) external onlyOwner {
+        address old = protocolFeeController;
+        protocolFeeController = newController;
+        emit ProtocolFeeControllerUpdated(old, newController);
+    }
+
     function setKrakenVerifiedRegistry(address _registry) external onlyOwner {
         require(_registry != address(0), "Invalid registry");
         address old = krakenVerifiedRegistry;
@@ -674,5 +689,6 @@ contract SentryLaunchFactory {
     ///      V4 consumed 0 slots (fee constants only).
     ///      V5 consumed 2 slots: isKrakenVerifiedPosition, krakenVerifiedRegistry.
     ///      V6 consumed 1 slot: _creatorFeeBps.
-    uint256[42] private __gap;
+    ///      V7 consumed 1 slot: protocolFeeController.
+    uint256[41] private __gap;
 }
